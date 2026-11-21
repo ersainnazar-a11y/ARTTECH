@@ -151,9 +151,9 @@ function matchAt(tokens: string[], i: number, pattern: string): number {
   return parts.length;
 }
 
-function findFirst(tokens: string[], patterns: string[]): string | null {
+function findFirst(tokens: string[], patterns: string[]): { word: string; at: number } | null {
   for (let i = 0; i < tokens.length; i++)
-    for (const p of patterns) if (matchAt(tokens, i, p)) return tokens[i];
+    for (const p of patterns) { const n = matchAt(tokens, i, p); if (n) return { word: tokens.slice(i, i + n).join(' '), at: i }; }
   return null;
 }
 
@@ -214,11 +214,13 @@ export function analyzeTextRules(text: string): TextAnalysis {
   const [season, seasonWord] = pick(SEASON);
   const [weather, weatherWord] = pick(WEATHER);
 
-  const motifs: { id: MotifId; word: string }[] = [];
+  // мотивы — в порядке появления в тексте (что автор назвал раньше, то важнее)
+  const motifs: { id: MotifId; word: string; at: number }[] = [];
   for (const [id, pats] of MOTIF_TRIGGERS) {
-    const w = findFirst(tokens, pats);
-    if (w) motifs.push({ id, word: w });
+    const hit = findFirst(tokens, pats);
+    if (hit) motifs.push({ id, word: hit.word, at: hit.at });
   }
+  motifs.sort((a, b) => a.at - b.at);
 
   const sensory: Sensory = { light: [], sounds: [], smells: [], textures: [] };
   for (const [kind, pats] of SENSORY) {

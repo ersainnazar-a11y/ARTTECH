@@ -1,6 +1,8 @@
 // Mood → DayStyle + decisions. Каждый параметр рендера — непрерывная функция весов режимов и Mood.
 
-import type { DayStyle, Decision, Mood, PhotoFeatures, RGB, Song } from '../types';
+import type { DayStyle, Decision, MotifId, Mood, PhotoFeatures, RGB, Song } from '../types';
+import { buildCollage, buildGeometry } from './geometry';
+import { pickMotifs } from './motifs';
 import type { Conflict } from '../analysis/fuse';
 import { modeWeights } from './modes';
 import { buildPalette } from './palette';
@@ -10,7 +12,7 @@ import { rgbHex } from '../analysis/photo';
 
 const mixc = (a: RGB, b: RGB, t: number): RGB => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 
-export function buildStyle(m: Mood, hero: PhotoFeatures | null, photoCount: number, conflict: Conflict, seed: number, song: Song | null = null, dayYear = 2026) {
+export function buildStyle(m: Mood, hero: PhotoFeatures | null, photoCount: number, conflict: Conflict, seed: number, song: Song | null = null, dayYear = 2026, motifWords: { id: MotifId; word: string }[] = []) {
   const rand = rng(seed ^ 0x5bd1e995);
   const decisions: Decision[] = [];
   const modes = modeWeights(m, photoCount, conflict);
@@ -142,6 +144,28 @@ export function buildStyle(m: Mood, hero: PhotoFeatures | null, photoCount: numb
     key: !!f,
   });
 
+  // — минимализм: очень медленно
+  if (w.minimal > 0.2) {
+    motion.camera *= 1 - 0.6 * w.minimal;
+    decisions.push({ source: 'текст', evidence: `минимализм ${Math.round(w.minimal * 100)}%`, rule: 'пустота = тишина: камера почти не движется, под фото — одна тонкая линия', effect: `скорость камеры ×${(1 - 0.6 * w.minimal).toFixed(2)}` });
+  }
+
+  // — режимы как слои
+  const geo = buildGeometry(w, m.arousal, seed);
+  decisions.push(...geo.decisions);
+  const col = buildCollage(w, photoCount, seed);
+  decisions.push(...col.decisions);
+  const mo = pickMotifs(motifWords, m, song);
+  decisions.push(...mo.decisions);
+  const accents = {
+    shimmer: clamp(w.impressionism * 1.1),
+    flash: clamp((w.film - 0.15) * 1.4),
+    hairline: clamp((w.minimal - 0.2) * 2),
+    waves: mo.motifs.find(x => x.id === 'waves')?.intensity ?? 0,
+  };
+  if (accents.shimmer > 0.25) decisions.push({ source: 'текст', evidence: `импрессионизм ${Math.round(w.impressionism * 100)}%`, rule: 'дрожание света: медленная волна яркости по кадру, мягкие растворения', effect: `мерцание ${Math.round(accents.shimmer * 100)}%` });
+  if (accents.flash > 0.2) decisions.push({ source: 'текст', evidence: `плёнка ${Math.round(w.film * 100)}%`, rule: 'склейка на плёнке = засветка конца ролика', effect: `вспышка на склейке ${Math.round(accents.flash * 100)}%` });
+
   const ts = typeStyle(m, w, rand);
   decisions.push(...ts.decisions);
 
@@ -157,6 +181,10 @@ export function buildStyle(m: Mood, hero: PhotoFeatures | null, photoCount: numb
     layout,
     type: ts.type,
     motion,
+    motifs: mo.motifs,
+    geometry: geo.geometry,
+    cards: col.cards,
+    accents,
   };
   decisions.push({
     source: 'текст',
@@ -165,6 +193,6 @@ export function buildStyle(m: Mood, hero: PhotoFeatures | null, photoCount: numb
     effect: `бумага ${rgbHex(P.paper)}, фактура ${Math.round(style.paper.intensity * 100)}%`,
   });
   // первая запись о режимах — ключевая
-  decisions[0].key = true;
+  decisions[0].key = 1;
   return { style, decisions };
 }

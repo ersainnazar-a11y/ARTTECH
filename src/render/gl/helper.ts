@@ -59,7 +59,7 @@ export function target(gl: WebGL2RenderingContext, w: number, h: number, float =
   return { tex, fbo, w, h };
 }
 
-type U = number | number[] | WebGLTexture;
+type U = number | number[] | WebGLTexture | { v4: number[] } | { v3: number[] } | { i: number };
 
 /** полноэкранный проход: uniforms по имени; текстуры привязываются к юнитам по порядку */
 export function pass(gl: WebGL2RenderingContext, pr: Prog, out: Target | null, w: number, h: number, uniforms: Record<string, U>, strips = 1) {
@@ -76,6 +76,9 @@ export function pass(gl: WebGL2RenderingContext, pr: Prog, out: Target | null, w
       gl.bindTexture(gl.TEXTURE_2D, v);
       gl.uniform1i(loc, unit++);
     } else if (typeof v === 'number') gl.uniform1f(loc, v);
+    else if ('v4' in v) { if (v.v4.length) gl.uniform4fv(loc, v.v4); }
+    else if ('v3' in v) { if (v.v3.length) gl.uniform3fv(loc, v.v3); }
+    else if ('i' in v) gl.uniform1i(loc, v.i);
     else if (v.length === 2) gl.uniform2fv(loc, v);
     else if (v.length === 3) gl.uniform3fv(loc, v);
     else if (v.length === 4) gl.uniform4fv(loc, v);

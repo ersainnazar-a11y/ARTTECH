@@ -38,6 +38,12 @@ const DAYS = [
     photos: [pick('SHOT_PHOTO_4', `${W}/ThemeC/img29.jpg`)],
   },
   {
+    name: 'rain',
+    date: '2026-11-19',
+    text: 'Вечером шёл дождь. Возвращалась одна через город, огни витрин расплывались в лужах, зонт не спасал. Немного грустно, но красиво.',
+    photos: [pick('SHOT_PHOTO_5', `${W}/Spotlight/img50.jpg`)],
+  },
+  {
     name: 'nophoto',
     song: { artist: 'Кино', title: 'Звезда по имени Солнце' },
     date: '2026-11-21',
@@ -87,6 +93,7 @@ for (const d of DAYS) {
   console.log(`${d.name}: ${Date.now() - t0} ms`);
   const info = await page.evaluate(() => ({ title: document.querySelector('.side h1')?.textContent, modes: [...document.querySelectorAll('.mode')].map(m => m.textContent.replace(/\s+/g, ' ').trim()) }));
   console.log('  ', info.title, '|', info.modes.join(' · '));
+  console.log('   why:', await page.evaluate(() => [...document.querySelectorAll('.why li')].map(l => l.textContent.replace(/\s+/g, ' ').trim()).filter(s => /мотив|фигур|карточ/.test(s)).join(' / ')));
   console.log('  ', await page.evaluate(() => (document.querySelector('.song-line')?.textContent ?? 'без песни') + ' | ' + (document.querySelector('.pinfo')?.textContent ?? '')));
   const png = await page.evaluate(async () => {
     const img = document.querySelector('.poster img');

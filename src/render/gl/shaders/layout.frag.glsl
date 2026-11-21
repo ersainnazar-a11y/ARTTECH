@@ -13,6 +13,7 @@ uniform float uZoomA, uZoomB;
 uniform vec2 uPanA, uPanB;
 uniform float uMix;              // 0 = A, 1 = B
 uniform float uPulse;            // вспышка экспозиции на сильной доле
+uniform float uWave, uTime;
 
 vec3 samplePhoto(sampler2D t, vec2 q, vec2 sc, float zoom, vec2 pan) {
   vec2 uv = q * sc / zoom + 0.5 + pan;
@@ -24,6 +25,11 @@ void main() {
   float c = cos(-uRot), s = sin(-uRot);
   d = mat2(c, s, -s, c) * d;
   vec2 q = d / (2.0 * uRect.zw); // -0.5..0.5 внутри рамки
+  // мотив «волны»: дисплейсмент, сильнее в нижней половине кадра
+  if (uWave > 0.0) {
+    float low = smoothstep(0.1, -0.5, q.y);
+    q += vec2(sin(q.y * 70.0 + uTime * 2.1) * 0.0035, sin(q.x * 38.0 + uTime * 1.7) * 0.006) * uWave * (0.3 + low);
+  }
   vec3 a = samplePhoto(uA, q, uScaleA, uZoomA, uPanA);
   vec3 col = a;
   if (uMix > 0.0) {

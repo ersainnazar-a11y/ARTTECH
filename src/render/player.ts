@@ -3,7 +3,7 @@
 
 import type { DayEntry } from '../types';
 import { Pipeline } from './gl/pipeline';
-import { buildScene, releaseScene, type Scene } from './scene';
+import { buildScene, frameParams, mainCycle, releaseScene, type Scene } from './scene';
 import { buildTimeline, frameAt, type Timeline } from './timeline';
 import { dateLine, pageLabel } from '../style/typography';
 
@@ -15,6 +15,7 @@ export class MemoryPlayer {
   private pipe: Pipeline;
   private scene: Scene | null = null;
   private tl: Timeline | null = null;
+  private cycle: number[] = [0];
   private audio: HTMLAudioElement | null = null;
   private url: string | null = null;
   private raf = 0;
@@ -35,7 +36,8 @@ export class MemoryPlayer {
       photos: e.photos, heroIndex: Math.max(0, e.heroIndex), style: e.style,
       date: dateLine(e.date, e.mood.timeOfDay), page: pageLabel(e.page), title: e.title, caption: e.caption, seed: e.seed,
     }, true);
-    this.tl = buildTimeline(e.style, e.song?.features?.beats, this.scene.painted.length, e.seed);
+    this.cycle = mainCycle(this.scene);
+    this.tl = buildTimeline(e.style, e.song?.features?.beats, this.cycle.length, e.seed, this.scene.cardRects.length);
     const blob = e.song?.blob ?? e.song?.previewBlob;
     const src = blob ? (this.url = URL.createObjectURL(blob)) : e.song?.previewUrl;
     if (src) {
@@ -53,13 +55,7 @@ export class MemoryPlayer {
 
   private draw(t: number) {
     const f = frameAt(this.tl!, t);
-    const P = this.scene!.painted;
-    this.pipe.frame(this.entry.style, {
-      a: P[f.a], b: f.mix > 0 ? P[f.b] : undefined, mix: f.mix,
-      zoomA: f.zoomA, panA: f.panA, zoomB: f.zoomB, panB: f.panB,
-      rect: this.scene!.rect, frameAspect: this.scene!.frameAspect,
-      pulse: f.pulse, seed: f.grainSeed, jitter: f.jitter,
-    });
+    this.pipe.frame(this.entry.style, frameParams(this.scene!, this.cycle, f, t));
     this.onTick(t, f.beatIndex);
   }
 

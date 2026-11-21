@@ -12,7 +12,9 @@ export async function renderDay(root: HTMLElement, id: string) {
   const d = await getDay(id);
   if (!d) { root.append(el('p', { class: 'empty' }, 'Такого дня нет в архиве.')); return; }
   const posterUrl = URL.createObjectURL(d.outputs.poster);
-  const keys = d.decisions.filter(x => x.key).slice(0, 5);
+  // ключевые решения по приоритету (число = важность, true = 5), порядок цепочки сохраняется внутри равных
+  const prio = (k: boolean | number | undefined) => (typeof k === 'number' ? k : k ? 5 : 99);
+  const keys = d.decisions.map((x, i) => ({ x, i })).filter(o => o.x.key).sort((a, b) => prio(a.x.key) - prio(b.x.key) || a.i - b.i).slice(0, 6).map(o => o.x);
   const why = (keys.length >= 3 ? keys : d.decisions.slice(0, 5));
   const modes = (Object.entries(d.style.modes) as [ModeId, number][]).sort((a, b) => b[1] - a[1]);
 

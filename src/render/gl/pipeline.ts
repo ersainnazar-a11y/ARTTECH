@@ -11,7 +11,12 @@ import TENSOR from './shaders/tensor.frag.glsl?raw';
 import BLUR from './shaders/blur.frag.glsl?raw';
 import KUWA from './shaders/kuwahara.frag.glsl?raw';
 import LAYOUT from './shaders/layout.frag.glsl?raw';
-import COMP from './shaders/composite.frag.glsl?raw';
+import COMMON from './shaders/common.glsl?raw';
+import BASE from './shaders/base.frag.glsl?raw';
+import CARD from './shaders/card.frag.glsl?raw';
+import GEO from './shaders/geometry.frag.glsl?raw';
+import MOTIFS from './shaders/motifs.frag.glsl?raw';
+import FINAL from './shaders/final.frag.glsl?raw';
 
 export interface Rect { cx: number; cy: number; hw: number; hh: number } // px, y сверху
 
@@ -36,20 +41,28 @@ export const coverScale = (frameAspect: number, photoAspect: number): [number, n
 /** фото, уже «написанное» стилем дня */
 export interface Painted { tex: WebGLTexture; w: number; h: number; aspect: number }
 
+/** карточка коллажа в кадре */
+export interface CardFrame { p: Painted; rect: Rect; rot: number; alpha: number }
+
 export interface FrameParams {
   a: Painted; b?: Painted; mix: number;
   zoomA: number; panA: [number, number]; zoomB: number; panB: [number, number];
   rect: Rect; frameAspect: number;
   pulse: number; seed: number; jitter?: [number, number];
+  time: number; beatIdx: number; beatDt: number; flash: number;
+  cards: CardFrame[];
+  band: [number, number];
 }
 
 const raf = () => new Promise<void>(r => requestAnimationFrame(() => r()));
+const withCommon = (body: string) => '#version 300 es\n' + COMMON + '\n' + body;
+const flat = (a: number[][]) => a.flat();
 
 export class Pipeline {
   readonly canvas: HTMLCanvasElement;
   private gl: WebGL2RenderingContext;
-  private progs: Record<'grade' | 'tensor' | 'blur' | 'kuwa' | 'layout' | 'comp', Prog>;
-  private t: Record<'photo' | 'haloA' | 'haloB', Target>;
+  private progs: Record<'grade' | 'tensor' | 'blur' | 'kuwa' | 'layout' | 'base' | 'card' | 'geo' | 'motifs' | 'final', Prog>;
+  private t: Record<'photo' | 'haloA' | 'haloB' | 'base', Target>;
   private vao: WebGLVertexArrayObject;
   private typeTex: WebGLTexture | null = null;
 
@@ -61,9 +74,11 @@ export class Pipeline {
     gl.bindVertexArray(this.vao);
     this.progs = {
       grade: program(gl, VS, GRADE), tensor: program(gl, VS, TENSOR), blur: program(gl, VS, BLUR),
-      kuwa: program(gl, VS, KUWA), layout: program(gl, VS, LAYOUT), comp: program(gl, VS, COMP),
+      kuwa: program(gl, VS, KUWA), layout: program(gl, VS, LAYOUT),
+      base: program(gl, VS, withCommon(BASE)), card: program(gl, VS, withCommon(CARD)), geo: program(gl, VS, withCommon(GEO)),
+      motifs: program(gl, VS, withCommon(MOTIFS)), final: program(gl, VS, withCommon(FINAL)),
     };
-    this.t = { photo: target(gl, W, H), haloA: target(gl, W >> 2, H >> 2), haloB: target(gl, W >> 2, H >> 2) };
+    this.t = { photo: target(gl, W, H), haloA: target(gl, W >> 2, H >> 2), haloB: target(gl, W >> 2, H >> 2), base: target(gl, W, H) };
   }
 
   /** цветокоррекция + Кувахара в пространстве фото. Радиус мазка задан для постера 1080 и пересчитывается под плотность пикселей. */
@@ -128,17 +143,62 @@ export class Pipeline {
       uScaleA: coverScale(f.frameAspect, f.a.aspect), uScaleB: coverScale(f.frameAspect, b.aspect),
       uZoomA: f.zoomA, uZoomB: f.zoomB, uPanA: f.panA, uPanB: f.panB,
       uMix: f.b ? f.mix : 0, uPulse: f.pulse,
+      uWave: S.accents?.waves ?? 0, uTime: f.time,
     });
     const hw = t.haloA.w, hh = t.haloA.h;
     pass(gl, progs.blur, t.haloA, hw, hh, { uSrc: t.photo.tex, uDir: [1 / hw, 0], uSigma: 6, uBright: 0.62 });
     pass(gl, progs.blur, t.haloB, hw, hh, { uSrc: t.haloA.tex, uDir: [0, 1 / hh], uSigma: 6, uBright: 0 });
-    pass(gl, progs.comp, null, W, H, {
-      uImg: t.photo.tex, uHalo: t.haloB.tex, uType: this.typeTex!,
-      uRes: [W, H], uSeed: f.seed, uHasPhoto: 1,
+    // 6) бумага + главный отпечаток + плёнка
+    const A = S.accents ?? { shimmer: 0, flash: 0, hairline: 0, waves: 0 };
+    pass(gl, progs.base, t.base, W, H, {
+      uImg: t.photo.tex, uHalo: t.haloB.tex,
+      uRes: [W, H], uSeed: f.seed, uTime: f.time,
       uRect: rect, uRot: S.layout.rotation, uFeather: S.layout.feather, uDeckle: S.layout.deckle, uBorder: S.layout.border,
       uPaper: S.paper.tone, uInk: S.palette.ink, uHigh: S.palette.highlight, uPaperInt: S.paper.intensity,
       uGrain: S.film.grain, uHalation: S.film.halation, uVignette: S.film.vignette,
       uLeak: S.film.leak, uLeakAngle: S.film.leakAngle, uLeakColor: S.film.leakColor,
+      uShimmer: A.shimmer, uFlash: f.flash * A.flash, uHairline: A.hairline,
+    });
+
+    // слои поверх: коллаж → геометрия → мотивы (премультиплицированное «over»)
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    for (const c of f.cards) {
+      if (c.alpha <= 0.001) continue;
+      pass(gl, progs.card, t.base, W, H, {
+        uPhoto: c.p.tex, uRes: [W, H], uScale: coverScale(c.rect.hw / c.rect.hh, c.p.aspect),
+        uRect: [c.rect.cx, H - c.rect.cy, c.rect.hw, c.rect.hh], uRot: c.rot,
+        uDeckle: S.layout.deckle, uAlpha: c.alpha, uPaperInt: S.paper.intensity, uGrain: S.film.grain, uSeed: f.seed,
+        uHigh: S.palette.highlight,
+      });
+    }
+    const sw = S.palette.swatches;
+    const pal = flat([S.palette.accent, S.palette.ink, sw[0], sw[1 % sw.length], sw[2 % sw.length], sw[3 % sw.length]]);
+    const G = S.geometry;
+    if (G && G.opacity > 0.001 && G.shapes.length) {
+      pass(gl, progs.geo, t.base, W, H, {
+        uRes: [W, H], uBand: f.band, uOpacity: G.opacity, uGrid: G.grid, uCount: { i: Math.min(13, G.shapes.length) },
+        uA: { v4: G.shapes.slice(0, 13).flatMap(s => [s.x, s.y, s.size, s.rot]) },
+        uB: { v4: G.shapes.slice(0, 13).flatMap(s => [s.type, s.color, s.beat, s.fill]) },
+        uPal: { v3: pal }, uBeatIdx: f.beatIdx, uBeatDt: f.beatDt, uTime: f.time,
+      });
+    }
+    const M = S.motifs ?? [];
+    if (M.length) {
+      pass(gl, progs.motifs, t.base, W, H, {
+        uRes: [W, H], uBand: f.band, uRect: rect, uRot: S.layout.rotation, uFeather: S.layout.feather, uDeckle: S.layout.deckle,
+        uTime: f.time, uBeat: Math.exp(-f.beatDt / 0.15), uSeed: (S.film.leakAngle / (Math.PI * 2)) % 1, // постоянен для дня, чтобы мотивы не «перескакивали»
+        uCount: { i: M.length },
+        uM: { v4: M.flatMap(m => [m.shader, m.intensity, m.density, m.speed]) },
+        uM2: { v4: M.flatMap(m => [m.sharpness, m.spill, 0, 0]) },
+        uPal: { v3: pal }, uHigh: S.palette.highlight,
+      });
+    }
+    gl.disable(gl.BLEND);
+
+    // 7) типографика + общее зерно
+    pass(gl, progs.final, null, W, H, {
+      uBase: t.base.tex, uType: this.typeTex!, uRes: [W, H], uSeed: f.seed, uGrain: S.film.grain, uPaperInt: S.paper.intensity,
     });
   }
 

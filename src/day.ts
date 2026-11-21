@@ -100,7 +100,7 @@ export async function createDay(input: DayInput, progress: Progress = () => {}):
   }
 
   progress('Выбираю художественный язык');
-  const st = buildStyle(fz.mood, hero >= 0 ? feats[hero] : null, feats.length, fz.conflict, seed, song, Number(input.date.slice(0, 4)));
+  const st = buildStyle(fz.mood, hero >= 0 ? feats[hero] : null, feats.length, fz.conflict, seed, song, Number(input.date.slice(0, 4)), text.motifs);
   decisions.push(...st.decisions);
   if (feats.length > 1) {
     decisions.push({ source: 'фото', evidence: `${feats.length} фото`, rule: 'число фото → ритм монтажа: каждое фото получает свой отрезок между склейками', effect: `${feats.length} кадров по кругу, склейка каждые ${st.style.motion.beatsPerCut} долей` });

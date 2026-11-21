@@ -5,9 +5,9 @@ import type { DayStyle } from '../types';
 import { clamp, rng, smooth } from '../util/seed';
 
 export interface Segment { start: number; end: number; photo: number; z0: number; z1: number; p0: [number, number]; p1: [number, number] }
-export interface Timeline { start: number; duration: number; beats: number[]; segments: Segment[]; beat: number; transition: number; pulse: number; jitter: number }
+export interface Timeline { start: number; duration: number; beats: number[]; segments: Segment[]; beat: number; transition: number; pulse: number; jitter: number; cardTimes: number[] }
 
-export function buildTimeline(style: DayStyle, beatsAbs: number[] | undefined, photoCount: number, seed: number): Timeline {
+export function buildTimeline(style: DayStyle, beatsAbs: number[] | undefined, photoCount: number, seed: number, cardCount = 0): Timeline {
   const M = style.motion;
   const beat = 60 / M.bpm;
   const duration = M.duration;
@@ -35,6 +35,8 @@ export function buildTimeline(style: DayStyle, beatsAbs: number[] | undefined, p
     transition: M.transitionBeats * beat,
     pulse: M.pulse,
     jitter: style.modes.film * 1.6 + style.modes.collage * 0.6,
+    // карточка i — на сильную долю 4·(i+1) (первая доля каждого такта)
+    cardTimes: Array.from({ length: cardCount }, (_, i) => beats[Math.min(beats.length - 1, 4 * (i + 1))] ?? (i + 1) * 4 * beat),
   };
 }
 
@@ -47,7 +49,7 @@ function kb(s: Segment, t: number): { z: number; p: [number, number] } {
 
 const hash = (n: number) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 
-export interface FrameState { a: number; b: number; mix: number; zoomA: number; panA: [number, number]; zoomB: number; panB: [number, number]; pulse: number; jitter: [number, number]; grainSeed: number; beatIndex: number }
+export interface FrameState { a: number; b: number; mix: number; zoomA: number; panA: [number, number]; zoomB: number; panB: [number, number]; pulse: number; jitter: [number, number]; grainSeed: number; beatIndex: number; beatDt: number; flash: number; cards: { alpha: number; scale: number }[] }
 
 export function frameAt(tl: Timeline, t: number): FrameState {
   const segs = tl.segments;
@@ -84,5 +86,10 @@ export function frameAt(tl: Timeline, t: number): FrameState {
     a: a.photo, b: b ? b.photo : a.photo, mix: b ? mix : 0,
     zoomA: ka.z * punch, panA: ka.p, zoomB: kbb.z * punch, panB: kbb.p,
     pulse: pulse * 0.5, jitter, grainSeed: hash(Math.floor(t * 24) + 3.3), beatIndex: bi,
+    beatDt: Math.max(0, t - (tl.beats[bi] ?? 0)),
+    // вспышка плёнки сразу после склейки
+    flash: cur.start > 0 && t >= cur.start ? Math.exp(-(t - cur.start) / 0.22) : 0,
+    // карточки коллажа «приклеиваются» на сильные доли: короткий шлепок масштаба
+    cards: tl.cardTimes.map(T => ({ alpha: smooth(T, T + 0.05, t), scale: t >= T ? 1 + 0.16 * Math.exp(-(t - T) / 0.11) : 1.16 })),
   };
 }

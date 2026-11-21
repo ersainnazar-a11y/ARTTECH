@@ -47,7 +47,7 @@ export interface Decision {
   rule: string;
   effect: string;
   /** ключевое решение для блока «Почему день выглядит так» */
-  key?: boolean;
+  key?: boolean | number; // число = приоритет (меньше — важнее), true = 5
 }
 
 export interface PhotoFeatures {
@@ -79,6 +79,14 @@ export interface DayStyle {
   paper: { intensity: number; tone: RGB };
   layout: { photoScale: number; centerY: number; rotation: number; feather: number; deckle: number; border: number; crop: number };
   type: { tracking: number; titleWeight: number; italic: boolean; inkSaturation: number; captionTilt: number; rule: boolean };
+  /** мотивы (до 3) — шейдерные слои поверх фото */
+  motifs: import('./style/motifs').MotifStyle[];
+  /** геометрический слой (SDF) */
+  geometry: import('./style/geometry').GeometryStyle;
+  /** карточки коллажа вокруг главного кадра */
+  cards: import('./style/geometry').Card[];
+  /** «дрожание света» импрессионизма, вспышка плёнки на склейке, тонкая линия минимализма */
+  accents: { shimmer: number; flash: number; hairline: number; waves: number };
   /** движение воспоминания: всё привязано к битам песни */
   motion: {
     bpm: number;

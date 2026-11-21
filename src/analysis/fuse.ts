@@ -93,7 +93,7 @@ export function fuse(text: TextAnalysis, feats: PhotoFeatures[], hero: number, d
   const top = (ax: 'v' | 'a' | 'w' | 'n' | 's' | 'i', sign: 1 | -1) =>
     text.hits.filter(h => (h.axes[ax] ?? 0) * sign > 0).sort((a, b) => Math.abs(b.axes[ax]!) - Math.abs(a.axes[ax]!)).slice(0, 3).map(h => `«${h.negated ? 'не ' : ''}${h.word}»`);
   const vw = top('v', mood.valence >= 0 ? 1 : -1);
-  if (vw.length) decisions.push({ source: 'текст', evidence: vw.join(', '), rule: 'словарь основ: эмоциональные слова → валентность (отрицание «не» переворачивает знак)', effect: `valence ${f2(mood.valence)}`, key: true });
+  if (vw.length) decisions.push({ source: 'текст', evidence: vw.join(', '), rule: 'словарь основ: эмоциональные слова → валентность (отрицание «не» переворачивает знак)', effect: `valence ${f2(mood.valence)}`, key: 3 });
   const aw = top('a', mood.arousal >= 0.42 ? 1 : -1);
   if (aw.length) decisions.push({ source: 'текст', evidence: aw.join(', '), rule: mood.arousal >= 0.42 ? 'слова действия и спешки → возбуждение' : 'слова покоя → низкое возбуждение', effect: `arousal ${f2(mood.arousal)}`, key: Math.abs(mood.arousal - 0.42) > 0.15 });
   const ww = top('w', mood.warmth >= 0.5 ? 1 : -1);
