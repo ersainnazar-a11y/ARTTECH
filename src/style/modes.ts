@@ -24,11 +24,11 @@ export function modeWeights(m: Mood, photoCount: number, conflict: Conflict) {
     impressionism: pos * calm ** 1.2 * (0.35 + 0.65 * m.warmth),
     // высокий arousal, напряжение
     // + напряжение: возбуждение при негативной валентности (дедлайн, ссора, тревога)
-    geometry: (m.arousal ** 2 * (0.55 + 0.45 * Math.abs(m.valence)) + 0.6 * m.arousal * Math.max(0, -m.valence)) * (1 - 0.5 * m.intimacy),
+    geometry: (m.arousal ** 2 * (0.55 + 0.45 * Math.abs(m.valence)) + 0.6 * m.arousal * Math.max(0, -m.valence)) * (1 - 0.5 * m.intimacy) + (conflict === 'bright-tension' ? 0.25 : 0),
     // воспоминания, вечер, минор
     film: 0.85 * m.nostalgia + evening + 0.35 * Math.max(0, -m.valence) + (conflict === 'bittersweet' ? 0.3 : 0),
     // тихо, одиноко, мало людей
-    minimal: (1 - m.social) ** 1.6 * calm * (0.6 + 0.4 * (1 - m.warmth)) * 1.2,
+    minimal: (1 - m.social) ** 1.6 * calm * (0.6 + 0.4 * (1 - m.warmth)) * 1.2 + (conflict === 'brave' ? 0.35 : 0),
     // много людей и фото, праздник
     collage: m.social * (0.35 + 0.65 * m.arousal) * (0.4 + 0.6 * many) * pos,
   };

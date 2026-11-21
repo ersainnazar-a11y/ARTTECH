@@ -5,7 +5,9 @@ import type { Decision, Mood, PhotoFeatures, Season, Song, TimeOfDay } from '../
 import type { TextAnalysis } from './text-rules';
 import { clamp, f2 } from '../util/seed';
 
-export type Conflict = 'bittersweet' | 'bright-tension' | null;
+/** bittersweet: весёлые слова + минорная песня (или тёмный кадр днём); brave: тяжёлые слова + бодрая мажорная песня;
+ *  bright-tension: суетный текст + спокойный кадр */
+export type Conflict = 'bittersweet' | 'brave' | 'bright-tension' | null;
 
 export interface FuseResult { mood: Mood; decisions: Decision[]; conflict: Conflict; photoMood: PhotoMood | null; musicMood: MusicMood | null }
 
@@ -164,6 +166,17 @@ export function fuse(text: TextAnalysis, feats: PhotoFeatures[], hero: number, d
       evidence: `текст valence ${f2(text.valence)} ↔ песня ${song!.features!.scale === 'minor' ? 'в миноре' : ''} valence ${f2(mm.valence)}`,
       rule: 'конфликт не усредняется в серость, а становится приёмом',
       effect: '«светлая грусть»: тёплая палитра + замедление + плёнка',
+      key: true,
+    });
+  }
+  // тяжёлый текст + бодрая мажорная песня = «держаться бодро»: не усредняем, а сталкиваем тишину кадра с ритмом
+  if (!conflict && mm && conf.text > 0.2 && text.valence < -0.25 && mm.valence > 0.15 && mm.arousal > 0.5) {
+    conflict = 'brave';
+    decisions.push({
+      source: 'музыка',
+      evidence: `текст valence ${f2(text.valence)} ↔ песня мажор, энергия ${f2(song!.features!.energy)}`,
+      rule: 'конфликт не усредняется: тишина и пустота кадра от слов, а ритм — от песни',
+      effect: '«держаться бодро»: пустой кадр + минимализм, но склейки и пульс на бодрых долях',
       key: true,
     });
   }

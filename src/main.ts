@@ -14,6 +14,7 @@ import './ui/styles.css';
 import { renderForm } from './input/form';
 import { renderFeed } from './archive/feed';
 import { renderDay } from './archive/day-view';
+import { renderSettings } from './ui/settings';
 
 const app = document.getElementById('app')!;
 
@@ -23,6 +24,7 @@ async function route() {
   app.innerHTML = '';
   window.scrollTo(0, 0);
   if (h.startsWith('#/new')) renderForm(app);
+  else if (h.startsWith('#/settings')) renderSettings(app);
   else if (h.startsWith('#/day/')) await renderDay(app, decodeURIComponent(h.slice(6)));
   else await renderFeed(app);
 }

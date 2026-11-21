@@ -28,6 +28,8 @@ export interface Song {
     keyStrength?: number; loudnessDb?: number; centroidHz?: number;
   };
   featuresFrom: 'audio' | 'description' | 'none';
+  /** кто оценил признаки «по описанию»: модель или таблица жанров */
+  describedBy?: 'llm' | 'genre';
   /** уверенность в признаках: аудио ≈ 0.6–0.95, описание 0.35 */
   confidence?: number;
 }

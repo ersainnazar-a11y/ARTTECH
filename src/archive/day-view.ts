@@ -91,7 +91,7 @@ export async function renderDay(root: HTMLElement, id: string) {
 function songLine(s: Song) {
   const name = esc([s.artist, s.title].filter(Boolean).join(' — '));
   const f = s.features;
-  const how = s.featuresFrom === 'audio' ? (s.source === 'file' ? 'анализ своего файла' : 'анализ официального фрагмента') : s.featuresFrom === 'description' ? 'оценка по описанию (жанр), не по звуку' : 'не анализировалась';
+  const how = s.featuresFrom === 'audio' ? (s.source === 'file' ? 'анализ своего файла' : 'анализ официального фрагмента') : s.featuresFrom === 'description' ? (s.describedBy === 'llm' ? 'оценка модели по исполнителю и названию, не по звуку' : 'оценка по жанру, не по звуку') : 'не анализировалась';
   const feat = f ? ` · ${Math.round(f.bpm)} BPM${f.key !== '—' ? ` · ${f.key} ${f.scale === 'minor' ? 'минор' : 'мажор'}` : ''} · энергия ${f.energy.toFixed(2)}` : '';
   return `<p class="song-line">♪ ${name}${s.year ? ` (${s.year})` : ''}${feat}<br><span class="muted">${how}</span>${s.link ? ` · <a href="${esc(s.link)}" target="_blank" rel="noopener">ссылка</a>` : ''}</p>`;
 }

@@ -2,6 +2,7 @@
 
 import { createDay, type SongInput } from '../day';
 import { searchItunes, type ItunesHit } from '../analysis/song-meta';
+import { llmReady, loadLlmConfig } from '../analysis/text-llm';
 import { el, esc } from '../ui/dom';
 
 const today = () => {
@@ -36,6 +37,7 @@ export function renderForm(root: HTMLElement) {
       <input name="link" placeholder="Ссылка (необязательно)">
       <p class="hint">Свой файл анализируется целиком. Без файла берём официальный 30-секундный фрагмент из iTunes. Если его нет, признаки оцениваются по жанру, и это будет отмечено.</p>
     </fieldset>
+    <p class="hint mode-line">${llmReady(loadLlmConfig()) ? `Текст разберёт модель <b>${esc(loadLlmConfig().model)}</b>, правила — запасной вариант.` : 'Текст разберёт словарь правил (офлайн).'} <a href="#/settings">Настройки</a></p>
     <button type="submit" class="primary">Создать воспоминание</button>
     <ol class="progress" aria-live="polite"></ol>
     <p class="err" role="alert"></p>`;

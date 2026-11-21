@@ -2,6 +2,7 @@
 
 import type { DayEntry, Decision, PhotoFeatures, Song } from './types';
 import { analyzeTextRules, pickCaption } from './analysis/text-rules';
+import { analyzeTextLLM, describeSongLLM, llmReady, loadLlmConfig } from './analysis/text-llm';
 import { analyzePhoto, pickHero } from './analysis/photo';
 import { fuse } from './analysis/fuse';
 import { analyzeAudio, describeFeatures, searchItunes, yearOf, type ItunesHit } from './analysis/song-meta';
@@ -53,10 +54,29 @@ export async function resolveSong(inp: SongInput, progress: Progress): Promise<{
       console.warn('preview analysis failed', err);
     }
   }
+  // приоритет 3а: LLM оценивает признаки по исполнителю/названию/году (честно помечается как «по описанию»)
+  const cfg = loadLlmConfig();
+  const who = meta.artist ?? inp.artist, what = meta.title ?? inp.title;
+  if (llmReady(cfg) && (who || what)) {
+    progress('Спрашиваю модель о песне');
+    const g = await describeSongLLM(cfg, who ?? '', what ?? '');
+    if (g && g.confidence >= 0.3) {
+      const period = 60 / g.bpm;
+      const year = meta.year ?? g.year;
+      return {
+        song: {
+          ...base, ...meta, year, genre: meta.genre ?? g.genre, source: hit?.previewUrl ? 'preview' : 'link', previewUrl: hit?.previewUrl,
+          features: { bpm: g.bpm, beats: Array.from({ length: Math.ceil(40 / period) }, (_, i) => i * period), key: '—', scale: g.scale, energy: g.energy, brightness: g.brightness, danceability: g.danceability },
+          featuresFrom: 'description', describedBy: 'llm', confidence: 0.25 + 0.25 * g.confidence,
+        },
+        decision: { source: 'музыка', evidence: `${who} — ${what}${year ? `, ${year}` : ''}`, rule: `приоритет 3: аудио недоступно → признаки оценила модель ${cfg.model} по описанию (не по звуку)`, effect: `featuresFrom: description, уверенность ${(0.25 + 0.25 * g.confidence).toFixed(2)}`, key: 6 },
+      };
+    }
+  }
   const d = describeFeatures(hit?.primaryGenreName);
   if (d) {
     return {
-      song: { ...base, ...meta, source: hit?.previewUrl ? 'preview' : 'link', previewUrl: hit?.previewUrl, features: d.features, featuresFrom: 'description', confidence: d.confidence },
+      song: { ...base, ...meta, source: hit?.previewUrl ? 'preview' : 'link', previewUrl: hit?.previewUrl, features: d.features, featuresFrom: 'description', describedBy: 'genre', confidence: d.confidence },
       decision: { source: 'музыка', evidence: `жанр «${hit!.primaryGenreName}»${meta.year ? `, ${meta.year} год` : ''}`, rule: 'приоритет 3: аудио недоступно → признаки оценены по описанию (таблица жанров)', effect: 'featuresFrom: description, низкая уверенность 0.35' },
     };
   }
@@ -68,7 +88,31 @@ export async function resolveSong(inp: SongInput, progress: Progress): Promise<{
 
 export async function createDay(input: DayInput, progress: Progress = () => {}): Promise<DayEntry> {
   progress('Читаю слова дня');
-  const text = analyzeTextRules(input.text);
+  const existingTitles = (await allDays()).map(d => d.title);
+  const rules = analyzeTextRules(input.text);
+  let text = rules;
+  const textDecisions: Decision[] = [];
+  const cfg = loadLlmConfig();
+  if (llmReady(cfg) && input.text.trim().length > 3) {
+    progress(`Читаю текст вместе с моделью ${cfg.model}`);
+    const r = await analyzeTextLLM(input.text, cfg, existingTitles);
+    if (r.analysis) {
+      text = r.analysis;
+      textDecisions.push({
+        source: 'текст', evidence: `модель ${cfg.model}${r.cached ? ' (из кэша)' : r.attempts > 1 ? ', со 2-й попытки' : ''}`,
+        rule: 'LLM: строгий JSON по схеме Mood, мотивы только из библиотеки и только со словами из текста, валидация + 1 повтор, temperature 0 + кэш → одинаковый ввод = одинаковый результат',
+        effect: `анализ текста — LLM (уверенность ${text.confidence.toFixed(2)})`,
+      });
+      // перекрёстная проверка с правилами: если знаки валентности расходятся при уверенных правилах — честно отмечаем
+      if (rules.confidence > 0.25 && Math.sign(rules.valence) !== Math.sign(text.valence) && Math.abs(rules.valence - text.valence) > 0.5) {
+        textDecisions.push({ source: 'текст', evidence: `правила valence ${rules.valence.toFixed(2)} ↔ модель ${text.valence.toFixed(2)}`, rule: 'расхождение со словарём: модель видит контекст (ирония, «не»), словарь — отдельные слова', effect: 'берём модель, но отмечаем расхождение' });
+      }
+    } else {
+      textDecisions.push({ source: 'текст', evidence: r.errors.slice(0, 2).join('; ') || 'нет ответа', rule: 'LLM не прошла валидацию за 2 попытки или недоступна → fallback на словарь правил', effect: 'анализ текста — правила (офлайн)', key: 7 });
+    }
+  } else {
+    textDecisions.push({ source: 'текст', evidence: 'ключ модели не задан', rule: 'работа без ключей и без сети: словарь русских основ', effect: 'анализ текста — правила (офлайн)' });
+  }
 
   progress('Раскладываю фото на цвета');
   const feats: PhotoFeatures[] = [];
@@ -89,7 +133,7 @@ export async function createDay(input: DayInput, progress: Progress = () => {}):
 
   progress('Сплетаю настроение');
   const fz = fuse(text, feats, hero, input.date, song);
-  const decisions: Decision[] = [...fz.decisions, ...songDecisions];
+  const decisions: Decision[] = [...textDecisions, ...fz.decisions, ...songDecisions];
   if (hero >= 0 && feats.length > 1) {
     decisions.push({
       source: 'фото',
@@ -106,18 +150,25 @@ export async function createDay(input: DayInput, progress: Progress = () => {}):
     decisions.push({ source: 'фото', evidence: `${feats.length} фото`, rule: 'число фото → ритм монтажа: каждое фото получает свой отрезок между склейками', effect: `${feats.length} кадров по кругу, склейка каждые ${st.style.motion.beatsPerCut} долей` });
   }
 
-  const existing = (await allDays()).map(d => d.title);
-  const tt = makeTitle(input.text, fz.mood, input.date, existing);
-  decisions.push(...tt.decisions);
-  const caption = pickCaption(input.text);
-  if (caption) decisions.push({ source: 'текст', evidence: `«${caption}»`, rule: 'подпись = самое эмоционально нагруженное предложение автора, его же словами', effect: 'рукописная строка над названием' });
+  // название и подпись: от модели (если прошли валидацию: 3–7 слов, без штампов, без повторов в архиве), иначе по правилам
+  let title: string;
+  if (text.title) {
+    title = text.title;
+    decisions.push({ source: 'текст', evidence: `модель ${text.model}`, rule: 'название от LLM: деталь + время/место, 3–7 слов, без пафоса и эмодзи, без повторов в архиве (проверено валидатором)', effect: `«${title}»` });
+  } else {
+    const tt = makeTitle(input.text, fz.mood, input.date, existingTitles);
+    title = tt.title;
+    decisions.push(...tt.decisions);
+  }
+  const caption = text.caption || pickCaption(input.text);
+  if (caption) decisions.push({ source: 'текст', evidence: `«${caption}»`, rule: text.caption ? 'подпись от LLM голосом автора, одна строка до 60 символов' : 'подпись = самое эмоционально нагруженное предложение автора, его же словами', effect: 'рукописная строка над названием' });
 
   progress('Печатаю воспоминание');
   const page = await nextPage();
   const poster = await renderPoster({
     photos: input.photos, heroIndex: hero, style: st.style,
     date: dateLine(input.date, fz.mood.timeOfDay), page: pageLabel(page),
-    title: tt.title, caption, seed,
+    title, caption, seed,
   });
 
   const entry: DayEntry = {
@@ -130,7 +181,7 @@ export async function createDay(input: DayInput, progress: Progress = () => {}):
     song,
     mood: fz.mood,
     style: st.style,
-    title: tt.title,
+    title,
     caption,
     decisions,
     outputs: { poster },

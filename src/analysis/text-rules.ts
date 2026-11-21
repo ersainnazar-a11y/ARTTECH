@@ -169,7 +169,15 @@ export interface TextAnalysis {
   hits: TextHit[];
   confidence: number;
   tokens: string[];
+  /** откуда анализ: словарь правил (офлайн) или LLM */
+  source?: 'rules' | 'llm';
+  model?: string;
+  /** только у LLM: название и подпись (проходят валидацию) */
+  title?: string;
+  caption?: string;
 }
+
+export type { Axis };
 
 export function analyzeTextRules(text: string): TextAnalysis {
   const tokens = tokenize(text);
@@ -240,6 +248,7 @@ export function analyzeTextRules(text: string): TextAnalysis {
     motifs, sensory, hits,
     confidence: clamp(hits.length / 6) * clamp(tokens.length / 12, 0.4, 1),
     tokens,
+    source: 'rules',
   };
 }
 
