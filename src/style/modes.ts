@@ -23,7 +23,8 @@ export function modeWeights(m: Mood, photoCount: number, conflict: Conflict) {
     // спокойно, тепло, valence > 0
     impressionism: pos * calm ** 1.2 * (0.35 + 0.65 * m.warmth),
     // высокий arousal, напряжение
-    geometry: m.arousal ** 2 * (0.55 + 0.45 * Math.abs(m.valence)) * (1 - 0.5 * m.intimacy),
+    // + напряжение: возбуждение при негативной валентности (дедлайн, ссора, тревога)
+    geometry: (m.arousal ** 2 * (0.55 + 0.45 * Math.abs(m.valence)) + 0.6 * m.arousal * Math.max(0, -m.valence)) * (1 - 0.5 * m.intimacy),
     // воспоминания, вечер, минор
     film: 0.85 * m.nostalgia + evening + 0.35 * Math.max(0, -m.valence) + (conflict === 'bittersweet' ? 0.3 : 0),
     // тихо, одиноко, мало людей

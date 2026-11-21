@@ -1,8 +1,8 @@
 // Форма дня: дата, текст, фото (перетаскивание или выбор), песня.
 
-import { createDay } from '../day';
-import type { Song } from '../types';
-import { el } from '../ui/dom';
+import { createDay, type SongInput } from '../day';
+import { searchItunes, type ItunesHit } from '../analysis/song-meta';
+import { el, esc } from '../ui/dom';
 
 const today = () => {
   const d = new Date();
@@ -27,7 +27,14 @@ export function renderForm(root: HTMLElement) {
     <fieldset class="song"><legend>Песня дня</legend>
       <input name="artist" placeholder="Исполнитель">
       <input name="title" placeholder="Название">
+      <div class="song-actions">
+        <button type="button" class="ghost find">Найти фрагмент</button>
+        <label class="ghost file-btn">Свой файл<input type="file" name="audio" accept="audio/*" hidden></label>
+        <span class="song-chosen"></span>
+      </div>
+      <ul class="hits"></ul>
       <input name="link" placeholder="Ссылка (необязательно)">
+      <p class="hint">Свой файл анализируется целиком. Без файла берём официальный 30-секундный фрагмент из iTunes. Если его нет, признаки оцениваются по жанру, и это будет отмечено.</p>
     </fieldset>
     <button type="submit" class="primary">Создать воспоминание</button>
     <ol class="progress" aria-live="polite"></ol>
@@ -59,6 +66,55 @@ export function renderForm(root: HTMLElement) {
   drop.ondragleave = () => drop.classList.remove('over');
   drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); add(e.dataTransfer?.files ?? null); };
 
+  // — песня: свой файл или найденный фрагмент
+  let audioFile: File | null = null;
+  let hit: ItunesHit | null = null;
+  let previewAudio: HTMLAudioElement | null = null;
+  const chosen = form.querySelector<HTMLSpanElement>('.song-chosen')!;
+  const hitsUl = form.querySelector<HTMLUListElement>('.hits')!;
+  const audioInput = form.querySelector<HTMLInputElement>('input[name=audio]')!;
+  const showChosen = () => {
+    chosen.textContent = audioFile ? `♪ файл: ${audioFile.name}` : hit ? `♪ ${hit.artistName} — ${hit.trackName}` : '';
+  };
+  audioInput.onchange = () => {
+    audioFile = audioInput.files?.[0] ?? null;
+    if (audioFile) { hit = null; hitsUl.innerHTML = ''; }
+    showChosen();
+  };
+  form.querySelector<HTMLButtonElement>('.find')!.onclick = async () => {
+    const q = `${(form.elements.namedItem('artist') as HTMLInputElement).value} ${(form.elements.namedItem('title') as HTMLInputElement).value}`.trim();
+    if (!q) { chosen.textContent = 'Введите исполнителя или название'; return; }
+    hitsUl.innerHTML = '<li class="muted">Ищу…</li>';
+    try {
+      const res = await searchItunes(q, 5);
+      hitsUl.innerHTML = '';
+      if (!res.length) { hitsUl.innerHTML = '<li class="muted">Ничего не нашлось. Можно оставить название, тогда музыка не повлияет на форму.</li>'; return; }
+      for (const h of res) {
+        const li = el('li', { class: 'hit' });
+        li.innerHTML = `${h.artworkUrl100 ? `<img src="${h.artworkUrl100}" alt="">` : ''}<span><b>${esc(h.trackName)}</b><br>${esc(h.artistName)}${h.releaseDate ? ` · ${h.releaseDate.slice(0, 4)}` : ''}${h.primaryGenreName ? ` · ${esc(h.primaryGenreName)}` : ''}</span>`;
+        const play = el('button', { type: 'button', class: 'ghost small', 'aria-label': 'Послушать фрагмент' }, '▶');
+        if (!h.previewUrl) play.setAttribute('disabled', '');
+        play.onclick = () => {
+          if (previewAudio && previewAudio.src === h.previewUrl && !previewAudio.paused) { previewAudio.pause(); return; }
+          previewAudio?.pause();
+          previewAudio = new Audio(h.previewUrl);
+          previewAudio.play();
+        };
+        const pick = el('button', { type: 'button', class: 'ghost small' }, 'Выбрать');
+        pick.onclick = () => {
+          hit = h; audioFile = null; audioInput.value = '';
+          hitsUl.querySelectorAll('.hit').forEach(x => x.classList.remove('on'));
+          li.classList.add('on');
+          showChosen();
+        };
+        li.append(play, pick);
+        hitsUl.append(li);
+      }
+    } catch {
+      hitsUl.innerHTML = '<li class="muted">Нет сети. Песня сохранится по названию, а музыка не повлияет на форму.</li>';
+    }
+  };
+
   const prog = form.querySelector<HTMLOListElement>('.progress')!;
   const err = form.querySelector<HTMLParagraphElement>('.err')!;
   form.onsubmit = async e => {
@@ -71,7 +127,8 @@ export function renderForm(root: HTMLElement) {
     btn.disabled = true;
     prog.innerHTML = '';
     const artist = String(fd.get('artist') ?? '').trim(), title = String(fd.get('title') ?? '').trim(), link = String(fd.get('link') ?? '').trim();
-    const song: Song | null = artist || title || link ? { source: 'link', artist, title, link: link || undefined, featuresFrom: 'none' } : null;
+    previewAudio?.pause();
+    const song: SongInput | null = artist || title || link || audioFile || hit ? { artist, title, link: link || undefined, file: audioFile ?? undefined, hit: hit ?? undefined } : null;
     try {
       const entry = await createDay({ date: String(fd.get('date')), text, photos, song }, step => {
         prog.querySelectorAll('li').forEach(li => li.classList.add('done'));

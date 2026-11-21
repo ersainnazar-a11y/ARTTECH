@@ -7,8 +7,9 @@ npm install && npm run dev
 ```
 
 - `npm run build` — проверка типов и сборка
-- `npm run shoot` — самопроверка: 5 тестовых дней → `shots/`
+- `node scripts/make-test-audio.mjs` — синтетические треки с известными BPM и тональностью
+- `npm run shoot` — самопроверка: 5 тестовых дней с музыкой, FPS воспоминания → `shots/`
 
-Документация: [docs/VISUAL_SYSTEM.md](docs/VISUAL_SYSTEM.md), [docs/TECHNIQUES.md](docs/TECHNIQUES.md).
+Документация: [docs/VISUAL_SYSTEM.md](docs/VISUAL_SYSTEM.md), [docs/TECHNIQUES.md](docs/TECHNIQUES.md), [docs/TOOLS.md](docs/TOOLS.md).
 
-Статус: **фаза 1** — ввод → анализ текста (правила) и фото → DayStyle + decisions → WebGL (цветокоррекция, Кувахара, плёнка, бумага, типографика) → постер → архив в IndexedDB.
+Статус: **фаза 2**. Ввод → анализ текста, фото и музыки (essentia.js в воркере, фрагменты iTunes) → DayStyle + decisions → WebGL (цветокоррекция, Кувахара, плёнка, бумага, типографика) → постер → бит-синхронное воспоминание 720×1280 с музыкой → архив в IndexedDB.

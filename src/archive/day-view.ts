@@ -5,7 +5,8 @@ import { el, esc } from '../ui/dom';
 import { humanDate } from './feed';
 import { rgbHex } from '../analysis/photo';
 import { MODE_NAMES } from '../style/modes';
-import type { ModeId } from '../types';
+import type { ModeId, Song } from '../types';
+import { MemoryPlayer } from '../render/player';
 
 export async function renderDay(root: HTMLElement, id: string) {
   const d = await getDay(id);
@@ -17,7 +18,14 @@ export async function renderDay(root: HTMLElement, id: string) {
 
   const page = el('article', { class: 'day' });
   page.innerHTML = `
-    <div class="poster"><img src="${posterUrl}" alt="Воспоминание: ${esc(d.title)}"></div>
+    <div class="poster">
+      <div class="stage"><img src="${posterUrl}" alt="Воспоминание: ${esc(d.title)}"></div>
+      <div class="play-row">
+        <button type="button" class="primary play">▶ Воспроизвести воспоминание</button>
+        <span class="beat" aria-hidden="true"></span>
+        <span class="pinfo">${d.style.motion ? `${d.style.motion.duration.toFixed(1)} с · ${Math.round(d.style.motion.bpm)} BPM · склейка каждые ${d.style.motion.beatsPerCut} долей` : ''}</span>
+      </div>
+    </div>
     <div class="side">
       <p class="date">${humanDate(d.date)} · ${d.mood.timeOfDay}</p>
       <h1>${esc(d.title)}</h1>
@@ -28,7 +36,7 @@ export async function renderDay(root: HTMLElement, id: string) {
       <ul class="why">${why.map(x => `<li><span class="src">${x.source}</span> ${esc(x.evidence)} → <em>${esc(x.effect)}</em></li>`).join('')}</ul>
       <h2>Запись</h2>
       <p class="text">${esc(d.text).replace(/\n/g, '<br>') || '<span class="muted">без слов</span>'}</p>
-      ${d.song ? `<p class="song">♪ ${esc([d.song.artist, d.song.title].filter(Boolean).join(' — '))}${d.song.link ? ` · <a href="${esc(d.song.link)}" target="_blank" rel="noopener">ссылка</a>` : ''}</p>` : ''}
+      ${d.song ? songLine(d.song) : ''}
       <div class="photos"></div>
       <details class="chain"><summary>Все решения (${d.decisions.length})</summary>
         <table><thead><tr><th>Источник</th><th>Вход</th><th>Правило</th><th>Результат</th></tr></thead>
@@ -43,8 +51,45 @@ export async function renderDay(root: HTMLElement, id: string) {
   d.photos.forEach((p, i) => ph.append(el('img', { src: URL.createObjectURL(p), alt: '', class: i === d.heroIndex ? 'hero' : '' })));
   page.querySelector<HTMLButtonElement>('.danger')!.onclick = async () => {
     if (!confirm(`Удалить «${d.title}» из дневника?`)) return;
+    player?.destroy();
     await deleteDay(d.id);
     location.hash = '#/archive';
   };
+
+  // — проигрывание воспоминания
+  let player: MemoryPlayer | null = null;
+  const stage = page.querySelector<HTMLDivElement>('.stage')!;
+  const playBtn = page.querySelector<HTMLButtonElement>('.play')!;
+  const beatEl = page.querySelector<HTMLSpanElement>('.beat')!;
+  let playing = false;
+  playBtn.onclick = async () => {
+    if (!d.style.motion) return;
+    if (playing) { player?.stop(); playing = false; playBtn.textContent = '▶ Воспроизвести воспоминание'; return; }
+    if (!player) {
+      playBtn.disabled = true;
+      playBtn.textContent = 'Готовлю кадры…';
+      player = new MemoryPlayer(d);
+      await player.load();
+      player.canvas.className = 'memory';
+      stage.replaceChildren(player.canvas);
+      let lastBeat = -1;
+      player.onTick = (_t, b) => { if (b !== lastBeat) { lastBeat = b; beatEl.classList.remove('hit'); void beatEl.offsetWidth; beatEl.classList.add('hit'); } };
+      player.onEnd = () => { playing = false; playBtn.textContent = '↺ Ещё раз'; };
+      playBtn.disabled = false;
+    }
+    playing = true;
+    playBtn.textContent = '■ Стоп';
+    await player.play();
+  };
+  const cleanup = () => { player?.destroy(); window.removeEventListener('hashchange', cleanup); };
+  window.addEventListener('hashchange', cleanup);
   root.append(page);
+}
+
+function songLine(s: Song) {
+  const name = esc([s.artist, s.title].filter(Boolean).join(' — '));
+  const f = s.features;
+  const how = s.featuresFrom === 'audio' ? (s.source === 'file' ? 'анализ своего файла' : 'анализ официального фрагмента') : s.featuresFrom === 'description' ? 'оценка по описанию (жанр), не по звуку' : 'не анализировалась';
+  const feat = f ? ` · ${Math.round(f.bpm)} BPM${f.key !== '—' ? ` · ${f.key} ${f.scale === 'minor' ? 'минор' : 'мажор'}` : ''} · энергия ${f.energy.toFixed(2)}` : '';
+  return `<p class="song-line">♪ ${name}${s.year ? ` (${s.year})` : ''}${feat}<br><span class="muted">${how}</span>${s.link ? ` · <a href="${esc(s.link)}" target="_blank" rel="noopener">ссылка</a>` : ''}</p>`;
 }

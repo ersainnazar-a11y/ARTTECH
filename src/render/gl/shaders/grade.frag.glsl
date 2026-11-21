@@ -1,14 +1,10 @@
 #version 300 es
-// 1) раскладка фото в кадре + 2) цветокоррекция: exposure → lift/gamma/gain → контраст → насыщенность → split-toning
+// 2) цветокоррекция в пространстве фото: exposure → lift/gamma/gain → контраст → насыщенность → split-toning
 precision highp float;
 in vec2 vUv;
 out vec4 outColor;
 
 uniform sampler2D uPhoto;
-uniform vec2 uRes;
-uniform vec4 uRect;      // центр (px), полуразмеры (px); y снизу
-uniform float uRot;
-uniform vec2 uUvScale;   // кадрирование (cover) внутри рамки
 uniform float uExposure, uContrast, uSat, uSplitBal, uWarmShadows;
 uniform vec3 uLift, uGamma, uGain, uSplitS, uSplitH;
 
@@ -18,12 +14,7 @@ vec3 softLight(vec3 a, vec3 b) {
 }
 
 void main() {
-  vec2 px = vUv * uRes;
-  vec2 d = px - uRect.xy;
-  float c = cos(-uRot), s = sin(-uRot);
-  d = mat2(c, s, -s, c) * d;
-  vec2 uv = clamp((d / (2.0 * uRect.zw)) * uUvScale + 0.5, 0.0, 1.0);
-  vec3 col = texture(uPhoto, uv).rgb;
+  vec3 col = texture(uPhoto, vUv).rgb;
 
   // экспозиция в линейном свете
   vec3 lin = pow(col, vec3(2.2)) * exp2(uExposure);

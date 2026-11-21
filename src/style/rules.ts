@@ -1,6 +1,6 @@
 // Mood → DayStyle + decisions. Каждый параметр рендера — непрерывная функция весов режимов и Mood.
 
-import type { DayStyle, Decision, Mood, PhotoFeatures, RGB } from '../types';
+import type { DayStyle, Decision, Mood, PhotoFeatures, RGB, Song } from '../types';
 import type { Conflict } from '../analysis/fuse';
 import { modeWeights } from './modes';
 import { buildPalette } from './palette';
@@ -10,7 +10,7 @@ import { rgbHex } from '../analysis/photo';
 
 const mixc = (a: RGB, b: RGB, t: number): RGB => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 
-export function buildStyle(m: Mood, hero: PhotoFeatures | null, photoCount: number, conflict: Conflict, seed: number) {
+export function buildStyle(m: Mood, hero: PhotoFeatures | null, photoCount: number, conflict: Conflict, seed: number, song: Song | null = null, dayYear = 2026) {
   const rand = rng(seed ^ 0x5bd1e995);
   const decisions: Decision[] = [];
   const modes = modeWeights(m, photoCount, conflict);
@@ -95,6 +95,53 @@ export function buildStyle(m: Mood, hero: PhotoFeatures | null, photoCount: numb
     key: w.minimal > 0.2 || layout.border > 0.3 || layout.feather > 0.3,
   });
 
+  // — музыка → форма
+  const f = song?.features;
+  if (f) {
+    const minor = f.scale === 'minor', ks = f.keyStrength ?? 0.6;
+    grade.exposure += (minor ? -0.06 : 0.05) * (0.5 + ks);
+    grade.saturation = clamp(grade.saturation * (minor ? 0.9 : 1.06), 0.35, 1.35);
+    painterly.sharpness = lerp(painterly.sharpness, lerp(4, 16, f.brightness), 0.6);
+    const age = song!.year ? Math.max(0, dayYear - song!.year) : 0;
+    const ageK = clamp((age - 8) / 30);
+    film.grain = clamp(film.grain + ageK * 0.07);
+    film.halation = clamp(film.halation + ageK * 0.15);
+    decisions.push({
+      source: 'музыка',
+      evidence: `${minor ? 'минор' : 'мажор'}${f.key !== '—' ? ` (${f.key})` : ''}, спектральная яркость ${f2(f.brightness)}${age ? `, песне ${age} лет` : ''}`,
+      rule: 'мажор/минор → светлота и насыщенность; яркость звука → резкость краёв мазка; год песни → сила плёнки',
+      effect: `экспозиция ${minor ? '−' : '+'}, насыщенность ×${minor ? '0.9' : '1.06'}, резкость q=${f2(painterly.sharpness)}${ageK > 0 ? `, зерно +${Math.round(ageK * 7)}%` : ''}`,
+    });
+  }
+
+  // — движение воспоминания (таймлайн на реальных битах)
+  const energy = f?.energy ?? m.arousal;
+  const bpm = f?.bpm ?? Math.round(60 + m.arousal * 60);
+  let beatsPerCut = energy < 0.4 ? 8 : energy < 0.68 ? 4 : 2;
+  const slow = bitter ? 0.75 : 1;
+  if (bitter) beatsPerCut = Math.min(8, beatsPerCut * 2);
+  const transitionBeats = Math.round(clamp(w.impressionism * 2 + w.minimal * 3 + w.film * 1.2 - w.geometry * 2 - w.collage * 1.5, 0, 3) * 4) / 4;
+  const beat = 60 / bpm, phraseDur = 16 * beat;
+  const start = f?.beats?.length ? f.beats[0] : 0;
+  const avail = song?.duration ? song.duration - start - 0.3 : 30;
+  let phrases = Math.max(1, Math.floor(Math.min(30, avail) / phraseDur));
+  if (phrases * phraseDur < 15 && (phrases + 1) * phraseDur <= Math.min(32, avail)) phrases++;
+  const motion: DayStyle['motion'] = {
+    bpm, beatsPerCut, transitionBeats,
+    pulse: clamp(0.006 + energy * 0.03 * (0.4 + w.geometry + w.collage), 0, 0.04),
+    camera: clamp((0.03 + energy * 0.07 + m.arousal * 0.03) * slow, 0.02, 0.14),
+    slow, phrases,
+    duration: f ? phrases * phraseDur : 20,
+    start,
+  };
+  decisions.push({
+    source: f ? 'музыка' : 'текст',
+    evidence: f ? `${Math.round(bpm)} BPM, энергия ${f2(energy)}, ${f.beats.length} битов` : `песни нет, arousal ${f2(m.arousal)}`,
+    rule: f ? 'склейки на реальных битах: низкая энергия — каждые 8 долей, средняя — 4, высокая — 2; длительность = целое число фраз по 16 долей' : 'без песни темп задаёт возбуждение дня',
+    effect: `склейка каждые ${beatsPerCut} долей${transitionBeats ? `, растворение ${transitionBeats} доли` : ', жёсткие склейки'}, ${f ? `${phrases} фраз = ${motion.duration.toFixed(1)} с` : '20 с'}${bitter ? ', замедление ×0.75' : ''}`,
+    key: !!f,
+  });
+
   const ts = typeStyle(m, w, rand);
   decisions.push(...ts.decisions);
 
@@ -109,6 +156,7 @@ export function buildStyle(m: Mood, hero: PhotoFeatures | null, photoCount: numb
     paper: { intensity: clamp(0.55 + w.film * 0.35 + w.minimal * 0.2 + m.nostalgia * 0.15), tone: P.paper },
     layout,
     type: ts.type,
+    motion,
   };
   decisions.push({
     source: 'текст',

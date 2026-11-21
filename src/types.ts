@@ -17,12 +17,19 @@ export interface Song {
   genre?: string;
   blob?: Blob;
   previewUrl?: string;
+  /** кэш официального фрагмента для проигрывания офлайн; в папку дня не экспортируется */
+  previewBlob?: Blob;
+  artwork?: string;
   link?: string;
+  duration?: number;
   features?: {
     bpm: number; beats: number[]; key: string; scale: 'major' | 'minor';
     energy: number; brightness: number; danceability: number;
+    keyStrength?: number; loudnessDb?: number; centroidHz?: number;
   };
   featuresFrom: 'audio' | 'description' | 'none';
+  /** уверенность в признаках: аудио ≈ 0.6–0.95, описание 0.35 */
+  confidence?: number;
 }
 
 export interface Sensory { light: string[]; sounds: string[]; smells: string[]; textures: string[] }
@@ -72,6 +79,18 @@ export interface DayStyle {
   paper: { intensity: number; tone: RGB };
   layout: { photoScale: number; centerY: number; rotation: number; feather: number; deckle: number; border: number; crop: number };
   type: { tracking: number; titleWeight: number; italic: boolean; inkSaturation: number; captionTilt: number; rule: boolean };
+  /** движение воспоминания: всё привязано к битам песни */
+  motion: {
+    bpm: number;
+    beatsPerCut: number;      // 2 / 4 / 8 долей на склейку
+    transitionBeats: number;  // длина растворения в долях (0 = жёсткая склейка)
+    pulse: number;            // амплитуда пульсации на долю
+    camera: number;           // скорость Ken Burns (доля масштаба за склейку)
+    slow: number;             // замедление (светлая грусть), 1 = нет
+    phrases: number;          // число фраз по 16 долей
+    duration: number;         // с
+    start: number;            // с от начала аудио
+  };
 }
 
 export interface DayEntry {
