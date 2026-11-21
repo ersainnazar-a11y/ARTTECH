@@ -133,6 +133,33 @@ await page.waitForSelector('.card img');
 await page.waitForTimeout(500);
 await page.screenshot({ path: 'shots/feed.png', fullPage: true });
 
+// поиск и фильтр
+await page.fill('.q', 'дожд');
+console.log('search «дожд»:', await page.locator('.list .card').count(), 'карточек');
+await page.fill('.q', '');
+await page.selectOption('.month', '2026-11');
+console.log('month 2026-11:', await page.locator('.list .card').count(), 'карточек');
+await page.selectOption('.month', '');
+// «Проверка лентой»
+await page.click('.seg button[data-v="strip"]');
+await page.waitForTimeout(400);
+await page.screenshot({ path: 'shots/feed-strip.png' });
+await page.click('.seg button[data-v="grid"]');
+
+// «Рентген дня»: статично и во время проигрывания
+await page.locator('.list .card', { hasText: 'день рождения' }).first().click();
+await page.waitForSelector('.poster img');
+await page.click('.xray-btn');
+await page.waitForSelector('.xray .xc');
+console.log('xray:', await page.locator('.xray .xc').count(), 'цепочек; подсвечено слов:', await page.locator('.text mark').count());
+await page.screenshot({ path: 'shots/xray.png' });
+await page.click('button.play');
+await page.waitForSelector('canvas.memory', { timeout: 60000 });
+await page.waitForTimeout(2600);
+console.log('xray live:', await page.locator('.xc.live .fx').textContent());
+await page.locator('.stage').screenshot({ path: 'shots/xray-live.png' });
+await page.click('button.play');
+
 await browser.close();
 await server.close();
 console.log('done');

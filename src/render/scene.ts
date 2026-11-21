@@ -47,6 +47,17 @@ async function source(blob: Blob): Promise<{ src: TexImageSource; w: number; h: 
   return { src: bmp, w: bmp.width, h: bmp.height, close: () => bmp.close() };
 }
 
+/** раскладка кадра без GL (для «Рентгена»): рамка фото и зоны текста в пикселях постера */
+export async function sceneLayout(s: SceneInput, W = 1080, H = 1920) {
+  await ensureFonts();
+  const ov = drawOverlay({ W, H, date: s.date, page: s.page, title: s.title, caption: s.caption, style: s.style });
+  let aspect = 0.8;
+  if (s.photos.length) { const b = await loadBitmap(s.photos[Math.max(0, s.heroIndex)]); aspect = b.width / b.height; b.close(); }
+  let rect = photoRect(s.style.layout, frameAspectOf(aspect, s.style.layout.crop ?? 0), W, H, ov.headerBottom, ov.textTop);
+  if ((s.style.cards ?? []).length && s.photos.length > 1) rect = { ...rect, hw: rect.hw * 0.86, hh: rect.hh * 0.86 };
+  return { W, H, rect, headerBottom: ov.headerBottom, textTop: ov.textTop };
+}
+
 /** порядок фото в воспоминании: hero первым, остальные — как загружены */
 export const photoOrder = (n: number, hero: number) => (n ? [hero, ...Array.from({ length: n }, (_, i) => i).filter(i => i !== hero)] : []);
 

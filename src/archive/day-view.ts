@@ -11,6 +11,7 @@ import { recordVideo } from '../output/video';
 import { dayFolderName, dayZip, download, ensureRoot, fsAccessAvailable, writeDayFolder } from '../output/folder';
 import { speak, stopSpeaking, ttsAvailable } from '../output/tts';
 import { saveDay } from './db';
+import { buildXray, declutter, evidenceWords, highlightText } from './xray';
 
 export async function renderDay(root: HTMLElement, id: string) {
   const d = await getDay(id);
@@ -28,6 +29,7 @@ export async function renderDay(root: HTMLElement, id: string) {
       <div class="stage"><img src="${posterUrl}" alt="Воспоминание: ${esc(d.title)}"></div>
       <div class="play-row">
         <button type="button" class="primary play">▶ Воспроизвести воспоминание</button>
+        <button type="button" class="ghost xray-btn" aria-pressed="false">Рентген</button>
         <span class="beat" aria-hidden="true"></span>
         <span class="pinfo">${d.style.motion ? `${d.style.motion.duration.toFixed(1)} с · ${Math.round(d.style.motion.bpm)} BPM · склейка каждые ${d.style.motion.beatsPerCut} долей` : ''}</span>
       </div>
@@ -86,7 +88,8 @@ export async function renderDay(root: HTMLElement, id: string) {
       player.canvas.className = 'memory';
       stage.replaceChildren(player.canvas);
       let lastBeat = -1;
-      player.onTick = (_t, b) => { if (b !== lastBeat) { lastBeat = b; beatEl.classList.remove('hit'); void beatEl.offsetWidth; beatEl.classList.add('hit'); } };
+      player.onTick = (t, b) => { if (b !== lastBeat) { lastBeat = b; beatEl.classList.remove('hit'); void beatEl.offsetWidth; beatEl.classList.add('hit'); xr?.onBeat(t, b); } };
+      if (xr) stage.append(xr.el); // рентген остаётся поверх живого кадра
       player.onEnd = () => { playing = false; playBtn.textContent = '↺ Ещё раз'; };
       playBtn.disabled = false;
     }
@@ -94,6 +97,27 @@ export async function renderDay(root: HTMLElement, id: string) {
     playBtn.textContent = '■ Стоп';
     await player.play();
   };
+  // — рентген: цепочки поверх кадра + подсветка слов-доказательств в тексте
+  let xr: Awaited<ReturnType<typeof buildXray>> | null = null;
+  const xBtn = page.querySelector<HTMLButtonElement>('.xray-btn')!;
+  const textEl = page.querySelector<HTMLParagraphElement>('.text')!;
+  const plainText = textEl.innerHTML;
+  xBtn.onclick = async () => {
+    const on = xBtn.getAttribute('aria-pressed') !== 'true';
+    xBtn.setAttribute('aria-pressed', String(on));
+    page.classList.toggle('xray-on', on);
+    if (on) {
+      xr ??= await buildXray(d, stage);
+      if (!stage.contains(xr.el)) stage.append(xr.el);
+      xr.el.hidden = false;
+      requestAnimationFrame(() => declutter(xr!.el));
+      textEl.innerHTML = highlightText(d.text, evidenceWords(d));
+    } else {
+      if (xr) xr.el.hidden = true;
+      textEl.innerHTML = plainText;
+    }
+  };
+
   // — видео, папка дня, голос
   const status = page.querySelector<HTMLParagraphElement>('.out-status')!;
   const bar = page.querySelector<HTMLDivElement>('.bar')!;

@@ -133,3 +133,45 @@ code { font: 12px var(--mono); background: var(--paper-2); padding: 1px 4px; bor
 .bar { height: 4px; background: var(--paper-2); border-radius: 2px; overflow: hidden; margin-top: 12px; max-width: 420px; }
 .bar i { display: block; height: 100%; width: 0; background: var(--ink); transition: width 0.2s; }
 .out-status { font: 12px/1.4 var(--mono); margin: 8px 0 0; }
+
+/* лента: инструменты */
+.feed-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.feed-head h1 { margin: 0; }
+.count { font: 14px/1 var(--mono); color: var(--ink-2); vertical-align: super; }
+.tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.tools .q { width: 260px; }
+.tools select { font: inherit; color: var(--ink); background: #fbf8f2; border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; }
+.seg { display: inline-flex; border: 1px solid #b9ad9c; border-radius: 4px; overflow: hidden; }
+.seg button { font: 500 13px/1 var(--ui); background: transparent; border: 0; padding: 11px 14px; cursor: pointer; color: var(--ink-2); }
+.seg button[aria-selected="true"] { background: var(--ink); color: var(--paper); }
+.card .m { font: 10.5px/1.3 var(--mono); color: var(--ink-2); letter-spacing: 0.02em; }
+.strip-note { margin: -6px 0 18px; font-size: 13px; max-width: 70ch; }
+
+/* «Проверка лентой»: до 7 постеров целиком в один ряд */
+.list.strip { display: flex; gap: clamp(8px, 1.2vw, 18px); justify-content: center; align-items: flex-start; flex-wrap: nowrap; }
+.list.strip .card { flex: 1 1 0; min-width: 0; max-width: 230px; }
+.list.strip .full img { width: 100%; aspect-ratio: 9 / 16; display: block; border-radius: 2px; box-shadow: 0 1px 2px rgba(40, 30, 20, 0.12), 0 10px 26px -14px rgba(40, 30, 20, 0.4); }
+.list.strip .t { font-size: 17px; }
+.strip-few { align-self: center; font-size: 13px; max-width: 18ch; }
+@media (max-width: 780px) { .list.strip { overflow-x: auto; justify-content: flex-start; } .list.strip .card { flex: 0 0 42vw; } .tools .q { width: 100%; } }
+
+/* «Рентген дня» */
+.stage { position: relative; }
+.xray { position: absolute; inset: 0; pointer-events: none; }
+.xray[hidden] { display: none; }
+.xray-scrim { position: absolute; inset: 0; background: rgba(14, 18, 24, 0.38); border-radius: 2px; }
+.xray-on .stage img, .xray-on .stage canvas.memory { filter: grayscale(0.55) contrast(1.05) brightness(0.9); }
+.day.xray-on { grid-template-columns: minmax(0, 540px) minmax(0, 1fr); }
+.xc { position: absolute; width: 9px; height: 9px; transform: translate(-4px, -4px); pointer-events: auto; outline: none; }
+.xc .dot { position: absolute; left: 0; top: 0; width: 9px; height: 9px; border-radius: 50%; background: #8fe7ff; box-shadow: 0 0 0 3px rgba(143, 231, 255, 0.25), 0 0 12px #8fe7ff; }
+.xc .chip { position: absolute; left: 14px; top: -6px; width: max-content; max-width: min(230px, 44vw); background: rgba(10, 14, 20, 0.86); color: #e6f6ff; border: 1px solid rgba(143, 231, 255, 0.45); border-radius: 3px; padding: 5px 7px; font: 10px/1.35 var(--mono); display: grid; gap: 1px; }
+.xc.r .chip { left: auto; right: 6px; }
+.xc .chip b { color: #8fe7ff; font-weight: 400; text-transform: uppercase; letter-spacing: 0.06em; font-size: 9px; }
+.xc .chip .rule { color: #9fb3c2; display: none; }
+.xc:hover .chip, .xc:focus .chip { z-index: 2; }
+.xc:hover .chip .rule, .xc:focus .chip .rule { display: block; }
+.xc .chip .fx { color: #fff3c4; }
+.xc.live.beat .dot { animation: xbeat 0.3s ease-out; }
+@keyframes xbeat { from { transform: scale(2.2); background: #fff3c4; } to { transform: scale(1); } }
+.xray-btn[aria-pressed="true"] { background: #0e1218; color: #8fe7ff; border-color: #8fe7ff; }
+mark { background: #fbe7a1; color: inherit; padding: 0 2px; border-radius: 2px; }
