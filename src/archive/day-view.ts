@@ -81,9 +81,12 @@ export async function renderDay(root: HTMLElement, id: string) {
     if (!d.style.motion) return;
     if (playing) { player?.stop(); playing = false; playBtn.textContent = '▶ Воспроизвести воспоминание'; return; }
     if (!player) {
+      // создаём плеер и «разблокируем» звук синхронно, в самом клике — до долгой подготовки кадров
+      player = new MemoryPlayer(d);
+      player.unlock();
+      player.onAudioIssue = msg => { pinfo.textContent = msg; pinfo.classList.add('warn'); };
       playBtn.disabled = true;
       playBtn.textContent = 'Готовлю кадры…';
-      player = new MemoryPlayer(d);
       await player.load();
       player.canvas.className = 'memory';
       stage.replaceChildren(player.canvas);
@@ -95,8 +98,16 @@ export async function renderDay(root: HTMLElement, id: string) {
     }
     playing = true;
     playBtn.textContent = '■ Стоп';
+    if (player.audioState === 'blocked') { pinfo.textContent = pinfoText; pinfo.classList.remove('warn'); player.unlock(); }
     await player.play();
+    if (player.audioState === 'ok') { pinfo.textContent = pinfoText; pinfo.classList.remove('warn'); }
   };
+  const pinfo = page.querySelector<HTMLSpanElement>('.pinfo')!;
+  const pinfoText = pinfo.textContent ?? '';
+  // честно: у дня нет звука, который можно проиграть
+  if (!d.song?.blob && !d.song?.previewBlob && !d.song?.previewUrl) {
+    pinfo.textContent = (d.song ? 'Звука нет: песня сохранена только названием. ' : 'Без песни: темп задан настроением. ') + pinfoText;
+  }
   // — рентген: цепочки поверх кадра + подсветка слов-доказательств в тексте
   let xr: Awaited<ReturnType<typeof buildXray>> | null = null;
   const xBtn = page.querySelector<HTMLButtonElement>('.xray-btn')!;

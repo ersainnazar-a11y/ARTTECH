@@ -35,7 +35,7 @@ async function fadedClip(e: DayEntry, start: number, duration: number): Promise<
 
 export async function recordVideo(e: DayEntry, progress: VideoProgress = () => {}, force?: 'offline'): Promise<VideoResult> {
   progress(0, 'Готовлю кадры');
-  const player = new MemoryPlayer(e);
+  const player = new MemoryPlayer(e, false);
   await player.load(false);
   try {
     const clip = await fadedClip(e, player.start, player.duration);
@@ -70,9 +70,16 @@ async function realtime(player: MemoryPlayer, clip: AudioBuffer | null, progress
   const stopped = new Promise<void>(r => (rec.onstop = () => r()));
 
   const dur = player.duration;
+  await ac.resume().catch(() => {});
+  // если браузер не дал запустить звук без жеста — AudioContext стоит на паузе, его часы не идут:
+  // не записываем немое видео, а уходим в покадровый рендер (ему воспроизведение не нужно)
+  if (clip && ac.state !== 'running') {
+    stream.getTracks().forEach(t => t.stop());
+    ac.close();
+    return null;
+  }
   player.drawAt(0);
   rec.start(250);
-  await ac.resume();
   const t0 = ac.currentTime + 0.05;
   src?.start(t0);
   const p0 = performance.now();

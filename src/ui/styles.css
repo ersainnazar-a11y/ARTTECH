@@ -175,3 +175,4 @@ code { font: 12px var(--mono); background: var(--paper-2); padding: 1px 4px; bor
 @keyframes xbeat { from { transform: scale(2.2); background: #fff3c4; } to { transform: scale(1); } }
 .xray-btn[aria-pressed="true"] { background: #0e1218; color: #8fe7ff; border-color: #8fe7ff; }
 mark { background: #fbe7a1; color: inherit; padding: 0 2px; border-radius: 2px; }
+.pinfo.warn { color: #8a2a1f; }

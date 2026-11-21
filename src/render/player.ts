@@ -23,8 +23,43 @@ export class MemoryPlayer {
   onEnd: () => void = () => {};
   onTick: (t: number, beat: number) => void = () => {};
 
-  constructor(private entry: DayEntry) {
+  /** что со звуком — показывается пользователю, а не глушится молча */
+  audioState: 'none' | 'ok' | 'blocked' | 'error' = 'none';
+  onAudioIssue: (message: string) => void = () => {};
+
+  constructor(private entry: DayEntry, withAudio = true) {
     this.pipe = shared ??= new Pipeline(VIDEO_W, VIDEO_H);
+    // аудиоэлемент создаётся СИНХРОННО в обработчике клика: браузеры разрешают звук только по жесту пользователя
+    if (withAudio) this.audio = this.makeAudio();
+  }
+
+  /** источник звука: свой файл → кэш фрагмента (тип исправлен) → ссылка на фрагмент */
+  private makeAudio(): HTMLAudioElement | null {
+    const s = this.entry.song;
+    if (!s) return null;
+    let blob = s.blob ?? s.previewBlob;
+    // iTunes отдаёт фрагменты как audio/x-m4p — Firefox и Safari такой тип не проигрывают, хотя внутри обычный AAC
+    if (blob && (!blob.type || /x-m4p|octet-stream/.test(blob.type))) blob = new Blob([blob], { type: 'audio/mp4' });
+    const src = blob ? (this.url = URL.createObjectURL(blob)) : s.previewUrl;
+    if (!src) return null;
+    const a = new Audio();
+    a.preload = 'auto';
+    a.src = src;
+    // запасной путь: если кэш не играет, пробуем официальную ссылку
+    a.addEventListener('error', () => {
+      if (s.previewUrl && a.src !== s.previewUrl) { a.src = s.previewUrl; return; }
+      this.audioState = 'error';
+      this.onAudioIssue('Браузер не смог проиграть файл песни — воспоминание идёт без звука.');
+    });
+    return a;
+  }
+
+  /** вызвать синхронно в обработчике клика, до любых await: «разблокирует» звук для этого элемента */
+  unlock() {
+    const a = this.audio;
+    if (!a) return;
+    a.muted = true;
+    a.play().then(() => { a.pause(); a.muted = false; }).catch(() => { a.muted = false; });
   }
 
   get canvas() { return this.pipe.canvas; }
@@ -43,16 +78,12 @@ export class MemoryPlayer {
     }, true);
     this.cycle = mainCycle(this.scene);
     this.tl = buildTimeline(e.style, e.song?.features?.beats, this.cycle.length, e.seed, this.scene.cardRects.length);
-    const blob = e.song?.blob ?? e.song?.previewBlob;
-    const src = blob ? (this.url = URL.createObjectURL(blob)) : e.song?.previewUrl;
-    if (src && withAudio) {
-      this.audio = new Audio(src);
-      this.audio.preload = 'auto';
+    if (!withAudio) { this.audio = null; }
+    const a = this.audio;
+    if (a && a.readyState < 4) {
       await new Promise<void>(res => {
-        const done = () => res();
-        this.audio!.addEventListener('canplaythrough', done, { once: true });
-        this.audio!.addEventListener('error', () => { this.audio = null; res(); }, { once: true });
-        setTimeout(done, 6000);
+        a.addEventListener('canplaythrough', () => res(), { once: true });
+        setTimeout(res, 6000);
       });
     }
     this.draw(0);
@@ -66,23 +97,32 @@ export class MemoryPlayer {
 
   /** текущее время воспоминания (с) */
   private now(): number {
-    if (this.audio) return this.audio.currentTime - this.tl!.start;
+    if (this.audio && this.audioState === 'ok') return this.audio.currentTime - this.tl!.start;
     return (performance.now() - this.t0) / 1000;
   }
 
   async play() {
     this.stop(false);
     const tl = this.tl!;
-    if (this.audio) {
+    if (this.audio && this.audioState !== 'error') {
       this.audio.currentTime = tl.start;
       this.audio.volume = 0;
-      try { await this.audio.play(); } catch { this.audio = null; }
+      try {
+        await this.audio.play();
+        this.audioState = 'ok';
+      } catch (err) {
+        // звук заблокирован политикой автозапуска: не молчим, а говорим, что делать
+        this.audioState = 'blocked';
+        this.onAudioIssue((err as DOMException)?.name === 'NotAllowedError'
+          ? 'Браузер заблокировал звук. Нажмите «Воспроизвести» ещё раз — теперь звук разрешится.'
+          : 'Звук не запустился: ' + String((err as Error)?.message ?? err));
+      }
     }
     this.t0 = performance.now();
     const loop = () => {
       const t = this.now();
       if (t >= tl.duration) { this.stop(true); return; }
-      if (this.audio) {
+      if (this.audio && this.audioState === 'ok') {
         const v = Math.min(1, Math.max(0, t / FADE), Math.max(0, (tl.duration - t) / FADE));
         this.audio.volume = v;
       }
