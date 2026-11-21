@@ -1,0 +1,24 @@
+{
+  "name": "atmosphere-diary",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "shoot": "node scripts/shoot.mjs"
+  },
+  "dependencies": {
+    "@fontsource/caveat": "^5.1.0",
+    "@fontsource/cormorant-garamond": "^5.1.0",
+    "@fontsource/inter": "^5.1.0",
+    "@fontsource/jetbrains-mono": "^5.1.0",
+    "idb": "^8.0.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0"
+  }
+}
