@@ -3,6 +3,7 @@
 import type { DayStyle, Decision, MotifId, Mood, PhotoFeatures, RGB, Song } from '../types';
 import { buildCollage, buildGeometry } from './geometry';
 import { pickMotifs } from './motifs';
+import { voiceStyle } from '../output/tts';
 import type { Conflict } from '../analysis/fuse';
 import { modeWeights } from './modes';
 import { buildPalette } from './palette';
@@ -166,6 +167,8 @@ export function buildStyle(m: Mood, hero: PhotoFeatures | null, photoCount: numb
   if (accents.shimmer > 0.25) decisions.push({ source: 'текст', evidence: `импрессионизм ${Math.round(w.impressionism * 100)}%`, rule: 'дрожание света: медленная волна яркости по кадру, мягкие растворения', effect: `мерцание ${Math.round(accents.shimmer * 100)}%` });
   if (accents.flash > 0.2) decisions.push({ source: 'текст', evidence: `плёнка ${Math.round(w.film * 100)}%`, rule: 'склейка на плёнке = засветка конца ролика', effect: `вспышка на склейке ${Math.round(accents.flash * 100)}%` });
 
+  const vo = voiceStyle(m);
+  decisions.push(vo.decision);
   const ts = typeStyle(m, w, rand);
   decisions.push(...ts.decisions);
 
@@ -185,6 +188,7 @@ export function buildStyle(m: Mood, hero: PhotoFeatures | null, photoCount: numb
     geometry: geo.geometry,
     cards: col.cards,
     accents,
+    voice: vo.voice,
   };
   decisions.push({
     source: 'текст',

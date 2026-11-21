@@ -89,6 +89,8 @@ export interface DayStyle {
   cards: import('./style/geometry').Card[];
   /** «дрожание света» импрессионизма, вспышка плёнки на склейке, тонкая линия минимализма */
   accents: { shimmer: number; flash: number; hairline: number; waves: number };
+  /** голос дня (Web Speech): скорость и высота из Mood */
+  voice?: { rate: number; pitch: number };
   /** движение воспоминания: всё привязано к битам песни */
   motion: {
     bpm: number;

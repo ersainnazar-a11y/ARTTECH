@@ -10,6 +10,7 @@ import { buildStyle } from './style/rules';
 import { makeTitle } from './style/title';
 import { dateLine, pageLabel } from './style/typography';
 import { renderPoster } from './output/poster';
+import { ensureRoot, writeDayFolder } from './output/folder';
 import { allDays, nextPage, saveDay } from './archive/db';
 import { hashString } from './util/seed';
 
@@ -190,5 +191,10 @@ export async function createDay(input: DayInput, progress: Progress = () => {}):
   };
   progress('Кладу в дневник');
   await saveDay(entry);
+  // если корневая папка «Дневник» уже выбрана и разрешение действует — сразу пишем папку дня (видео допишется после записи)
+  try {
+    const root = await ensureRoot(false);
+    if (root) { progress('Сохраняю папку дня'); await writeDayFolder(root, entry); }
+  } catch (err) { console.warn('folder save skipped', err); }
   return entry;
 }

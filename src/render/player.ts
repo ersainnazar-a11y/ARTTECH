@@ -30,7 +30,12 @@ export class MemoryPlayer {
   get canvas() { return this.pipe.canvas; }
   get duration() { return this.tl?.duration ?? 0; }
 
-  async load() {
+  /** время начала фрагмента в аудио (с) */
+  get start() { return this.tl?.start ?? 0; }
+  /** нарисовать кадр в момент t — для записи видео */
+  drawAt(t: number) { this.draw(Math.max(0, Math.min(t, this.duration - 1e-3))); }
+
+  async load(withAudio = true) {
     const e = this.entry;
     this.scene = await buildScene(this.pipe, {
       photos: e.photos, heroIndex: Math.max(0, e.heroIndex), style: e.style,
@@ -40,7 +45,7 @@ export class MemoryPlayer {
     this.tl = buildTimeline(e.style, e.song?.features?.beats, this.cycle.length, e.seed, this.scene.cardRects.length);
     const blob = e.song?.blob ?? e.song?.previewBlob;
     const src = blob ? (this.url = URL.createObjectURL(blob)) : e.song?.previewUrl;
-    if (src) {
+    if (src && withAudio) {
       this.audio = new Audio(src);
       this.audio.preload = 'auto';
       await new Promise<void>(res => {
