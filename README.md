@@ -28,7 +28,7 @@ npm install && npm run dev
 - `node scripts/smoke-dist.mjs` — дымовая проверка собранной версии
 
 ## Деплой
-- **GitHub Pages:** запушить в ветку `main` публичного репозитория и в настройках репозитория выбрать Pages → Source: GitHub Actions. Workflow `.github/workflows/deploy.yml` соберёт и опубликует `dist/`.
+- **GitHub Pages:** сайт — https://ersainnazar-a11y.github.io/ARTTECH/ (репозиторий https://github.com/ersainnazar-a11y/ARTTECH). Каждый пуш в `main` запускает workflow `.github/workflows/deploy.yml`: сборка с `BASE_PATH=/ARTTECH/` и публикация `dist/`. Один раз в настройках репозитория нужно выбрать Pages → Source: GitHub Actions. Если репозиторий переименуют, поменяйте `BASE_PATH` в workflow.
 - **Vercel:** импортировать репозиторий — Vite определится автоматически (build: `npm run build`, output: `dist`).
 
 Ключи API в репозиторий не попадают: провайдер и ключ задаются в «Настройках» и хранятся только в браузере.

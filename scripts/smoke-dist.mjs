@@ -3,7 +3,8 @@ import { preview } from 'vite';
 import { chromium } from 'playwright';
 
 const server = await preview({ preview: { port: 5194, strictPort: true }, logLevel: 'error' });
-const base = 'http://localhost:5194/';
+// BASE_PATH=/ARTTECH/ — проверка ровно в том виде, как на GitHub Pages
+const base = 'http://localhost:5194' + (process.env.BASE_PATH ?? '/');
 const browser = await chromium.launch({ channel: 'msedge', args: ['--use-angle=d3d11'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 const errors = [];

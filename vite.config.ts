@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  // относительные пути: одна и та же сборка работает на GitHub Pages (/<repo>/), Vercel и из любой папки
-  base: './',
+  // Адрес сайта на GitHub Pages: https://ersainnazar-a11y.github.io/ARTTECH/ → base '/ARTTECH/'.
+  // BASE_PATH задаётся в workflow деплоя; локально и на Vercel — относительные пути './'.
+  base: process.env.BASE_PATH ?? './',
   // зависимости объявлены заранее: иначе dev-сервер оптимизирует их на лету и перезагружает страницу посреди работы
   optimizeDeps: { include: ['idb', 'jszip', 'mediabunny'] },
   worker: { format: 'es' },
